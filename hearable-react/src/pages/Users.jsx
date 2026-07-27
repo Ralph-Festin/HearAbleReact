@@ -2,27 +2,25 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../supabaseClient'; 
 
-// Custom hooks and utilities
 import { useUsers } from '../hooks/useUsers';
 import { sortData } from '../utils/sortUtils';
 
-// Shared UI components
 import SearchBar from '../components/common/SearchBar';
 import Avatar from '../components/common/Avatar';
 import StatusBadge from '../components/common/StatusBadge';
 import Modal from '../components/common/Modal';
 import EmptyState from '../components/common/EmptyState';
 import FilterSelect from '../components/common/FilterSelect'; 
+import RejectModal from '../components/modals/RejectModal'; 
 
 export default function Users({ role }) {
   const navigate = useNavigate();
-  const location = useLocation(); // 🚨 NEW: Added useLocation
+  const location = useLocation(); 
   
   const { users, isLoading } = useUsers(role);
 
   const [searchQuery, setSearchQuery] = useState('');
   
-  // 🚨 UPDATED: Read the activeTab from the navigation state if it exists
   const [activeTab, setActiveTab] = useState(location.state?.activeTab || 'All');
   
   const [sortBy, setSortBy] = useState('name_asc');
@@ -34,11 +32,15 @@ export default function Users({ role }) {
 
   const [resumeModal, setResumeModal] = useState({ isOpen: false, isLoading: false, userName: '', resumes: [] });
 
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+  const [isSubmittingReject, setIsSubmittingReject] = useState(false);
+  const [resumeToReject, setResumeToReject] = useState(null);
+
   useEffect(() => {
     if (role !== 'admin') navigate('/');
   }, [role, navigate]);
 
-  // 🚨 NEW: Clear the navigation state after setting the tab so refreshes act normally
   useEffect(() => {
     if (location.state?.activeTab) {
       setActiveTab(location.state.activeTab);
@@ -65,7 +67,14 @@ export default function Users({ role }) {
     setResumeModal({ isOpen: true, isLoading: false, userName, resumes: data || [] });
   }
 
-  async function handleUpdateResumeStatus(resumeId, newStatus) {
+  async function handleUpdateResumeStatus(resumeId, newStatus, reason = '') {
+    if (newStatus === 'Rejected' && !reason) {
+      setResumeToReject(resumeId);
+      setShowRejectModal(true);
+      return;
+    }
+
+    setIsSubmittingReject(true);
     const { error } = await supabase
       .from('resumes')
       .update({ status: newStatus })
@@ -76,9 +85,28 @@ export default function Users({ role }) {
         ...prev,
         resumes: prev.resumes.map(r => r.id === resumeId ? { ...r, status: newStatus } : r)
       }));
+      
+      if (newStatus === 'Rejected' && reason) {
+        const resume = resumeModal.resumes.find(r => r.id === resumeId);
+        if (resume) {
+          await supabase.from('notifications').insert([{
+            user_id: resume.user_id,
+            title: 'Resume Rejected',
+            message: `Your resume "${resume.title}" was rejected. Reason: ${reason}`,
+            type: 'user'
+          }]);
+        }
+      }
+      
+      if (showRejectModal) {
+        setShowRejectModal(false);
+        setRejectReason('');
+        setResumeToReject(null);
+      }
     } else {
       alert("Failed to update resume status.");
     }
+    setIsSubmittingReject(false);
   }
 
   const uniqueDegrees = ['All', ...[...new Set(users.map(u => u.degreeText).filter(Boolean))].sort()];
@@ -317,6 +345,17 @@ export default function Users({ role }) {
           <p className="text-secondary text-center m-0">No resumes uploaded.</p>
         )}
       </Modal>
+
+      <RejectModal 
+        isOpen={showRejectModal}
+        onClose={() => setShowRejectModal(false)}
+        onSubmit={(reason) => handleUpdateResumeStatus(resumeToReject, 'Rejected', reason)}
+        rejectReason={rejectReason}
+        setRejectReason={setRejectReason}
+        isSubmitting={isSubmittingReject}
+        title="Reject Resume"
+        placeholder="Provide a reason for rejecting this resume..."
+      />
 
     </div>
   );

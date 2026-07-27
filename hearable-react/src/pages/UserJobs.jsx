@@ -17,7 +17,6 @@ export default function UserJobs() {
   
   const [activeTab, setActiveTab] = useState('Applied');
 
-  // States for the feedback modal
   const [feedbackApp, setFeedbackApp] = useState(null);
   const [feedbackTitle, setFeedbackTitle] = useState('');
   const [comment, setComment] = useState('');
@@ -90,7 +89,6 @@ export default function UserJobs() {
 
     setIsSubmittingFeedback(true);
     
-    // Append the hidden Job ID tag and Title to match JobDetailsPane format
     const finalMessage = `${comment.trim()}\n\n---\n📌 Job Title: ${feedbackApp.job?.title}\n[JobID:${feedbackApp.job?.id}]`;
 
     try {
@@ -115,13 +113,11 @@ export default function UserJobs() {
     }
   }
 
-  // 🚨 NEW: Helper function to determine if a job's deadline has passed
   const isJobExpired = (dateString) => {
     if (!dateString) return false;
     return new Date(dateString) < new Date(new Date().setHours(0,0,0,0));
   };
 
-  // 🚨 UPDATED: Display lists now automatically filter out expired jobs for Saved & Applied
   let displayList = [];
   if (activeTab === 'Saved') {
     displayList = savedJobs.filter(item => !isJobExpired(item.job?.closing_date));
@@ -149,7 +145,6 @@ export default function UserJobs() {
       <div className="flex-row gap-8 mb-32" style={{ overflowX: 'auto', borderBottom: '1px solid var(--border-color)' }}>
         {tabs.map(tab => {
           let count = 0;
-          // 🚨 UPDATED: Tab counts stay accurate by filtering out expired jobs as well
           if (tab === 'Saved') count = savedJobs.filter(item => !isJobExpired(item.job?.closing_date)).length;
           if (tab === 'Applied') count = applications.filter(item => !isJobExpired(item.job?.closing_date)).length;
           if (tab === 'Interviews') count = applications.filter(a => a.status === 'Interviewing' || a.status === 'Approved').length;
@@ -200,9 +195,9 @@ export default function UserJobs() {
             const isHiredStage = item.status === 'Hired';
             const showFeedbackBtn = isInterviewStage || isHiredStage || activeTab === 'Interviews' || activeTab === 'Hired';
             
-            // 🚨 NEW: Determines if the job is expired and should be unclickable
             const expired = isJobExpired(item.job?.closing_date);
-            const disableClick = expired && (activeTab === 'Interviews' || activeTab === 'Hired' || activeTab === 'Archived');
+            
+            const disableClick = expired && activeTab === 'Archived';
 
             return (
               <div 
@@ -210,14 +205,13 @@ export default function UserJobs() {
                 className="w-full" 
                 style={{ 
                   position: 'relative', 
-                  opacity: disableClick ? 0.7 : 1, // Visually greys out expired items
+                  opacity: disableClick ? 0.7 : 1,
                   transition: 'opacity 0.2s'
                 }}
               >
                 
                 <div style={{ position: 'absolute', top: '16px', right: '16px', zIndex: 2, pointerEvents: 'none', display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  {/* 🚨 NEW: Shows a 'Closed' badge if the job is expired */}
-                  {disableClick && (
+                  {expired && (
                     <span className="badge badge-neutral" style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca' }}>
                       Closed
                     </span>
@@ -236,7 +230,6 @@ export default function UserJobs() {
                   <JobCard 
                     job={item.job} 
                     isSelected={false} 
-                    // Prevents redirection to the job board if expired
                     onClick={disableClick ? () => {} : () => navigate('/jobs', { state: { selectedJobId: item.job.id } })} 
                   >
                     {showFeedbackBtn && (
@@ -250,7 +243,7 @@ export default function UserJobs() {
                           fontWeight: '600',
                           borderRadius: '6px',
                           cursor: 'pointer',
-                          pointerEvents: 'auto' // Ensures button remains clickable even if the card is not
+                          pointerEvents: 'auto'
                         }}
                         onClick={(e) => {
                           e.stopPropagation();
@@ -269,11 +262,10 @@ export default function UserJobs() {
       ) : (
         <div className="card text-center text-secondary p-32 mt-32">
           <h3 className="mb-8">No {activeTab.toLowerCase()} jobs</h3>
-          <p>You don't have any jobs in this category yet.</p>
+          <p>You do not have any jobs in this category yet.</p>
         </div>
       )}
 
-      {/* RESTRUCTURED MODAL (Matches JobDetailsPane exactly) */}
       {feedbackApp && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, padding: '20px' }}>
           <div className="card p-0" style={{ width: '100%', maxWidth: '500px', background: 'var(--card-bg)', boxShadow: '0 20px 40px rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', overflow: 'hidden' }}>

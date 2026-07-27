@@ -8,6 +8,7 @@ import JobCard from '../components/jobs/JobCard';
 import JobDetailsPane from '../components/jobs/JobDetailsPane';
 import SearchBar from '../components/common/SearchBar';
 import JobFilters from '../components/common/JobFilters';
+import RejectModal from '../components/modals/RejectModal';
 import './Jobs.css'; 
 
 export default function Jobs() {
@@ -34,6 +35,11 @@ export default function Jobs() {
   const [isUploadingResume, setIsUploadingResume] = useState(false);
   
   const [applyModalTab, setApplyModalTab] = useState('select'); 
+
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+  const [isSubmittingReject, setIsSubmittingReject] = useState(false);
+  const [jobToReject, setJobToReject] = useState(null);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterModality, setFilterModality] = useState('All');
@@ -72,12 +78,17 @@ export default function Jobs() {
         ? new Date(job.closing_date) < new Date(new Date().setHours(0,0,0,0)) 
         : false;
 
-      // 🚨 REVERTED: Simple visibility logic for the public board
+      const isOwner = currentUser && job.company_id === currentUser.id;
+
       if (role === 'admin') {
         if (adminStatusFilter !== 'All' && job.status !== adminStatusFilter) return false;
       } else {
         if (job.status !== 'Approved') return false;
-        if (isDeadlinePassed) return false;
+        
+        const userApp = appliedJobs.find(a => a.job_id === job.id);
+        const isAdvancedCandidate = userApp && ['Interviewing', 'Approved', 'Hired'].includes(userApp.status);
+
+        if (isDeadlinePassed && !isOwner && !isAdvancedCandidate) return false;
       }
 
       const matchesSearch = (job.title || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -247,16 +258,49 @@ export default function Jobs() {
     setIsSaving(false);
   }
 
-  async function handleUpdateJobStatus(jobId, newStatus) {
+  async function handleUpdateJobStatus(jobId, newStatus, reason = '') {
     if (role !== 'admin') return;
-    const { error } = await supabase.from('jobs').update({ status: newStatus }).eq('id', jobId);
+
+    if (newStatus === 'Rejected' && !reason) {
+      setJobToReject(jobId);
+      setShowRejectModal(true);
+      return;
+    }
+
+    setIsSubmittingReject(true);
+    
+    const updateData = { status: newStatus };
+    const { error } = await supabase.from('jobs').update(updateData).eq('id', jobId);
     
     if (!error) {
       setJobs(jobs?.map(j => j.id === jobId ? { ...j, status: newStatus } : j));
-      if (newStatus === 'Rejected' && adminStatusFilter === 'Pending') setSelectedJobId(null);
+      
+      if (newStatus === 'Rejected' && reason) {
+        const job = jobs?.find(j => j.id === jobId);
+        if (job) {
+          await supabase.from('notifications').insert([{
+            user_id: job.company_id,
+            title: 'Job Posting Rejected',
+            message: `Your job posting "${job.title}" was rejected. Reason: ${reason}`,
+            type: 'job',
+            link: '/my-jobs'
+          }]);
+        }
+      }
+
+      if (newStatus === 'Rejected' && adminStatusFilter === 'Pending') {
+        setSelectedJobId(null);
+      }
+      
+      if (showRejectModal) {
+        setShowRejectModal(false);
+        setRejectReason('');
+        setJobToReject(null);
+      }
     } else {
       alert("Failed to update job status.");
     }
+    setIsSubmittingReject(false);
   }
 
   async function handleDeleteJob() {
@@ -443,7 +487,7 @@ export default function Jobs() {
       </div>
 
       {showApplyModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999, padding: '20px' }}>
           <div className="card p-0" style={{ width: '100%', maxWidth: '500px', background: 'var(--card-bg)', boxShadow: '0 20px 40px rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', overflow: 'hidden' }}>
             
             <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -565,6 +609,17 @@ export default function Jobs() {
           </div>
         </div>
       )}
+
+      <RejectModal 
+        isOpen={showRejectModal}
+        onClose={() => setShowRejectModal(false)}
+        onSubmit={(reason) => handleUpdateJobStatus(jobToReject, 'Rejected', reason)}
+        rejectReason={rejectReason}
+        setRejectReason={setRejectReason}
+        isSubmitting={isSubmittingReject}
+        title="Reject Job Posting"
+        placeholder="Provide a reason for rejecting this job posting (this will be sent to the company)..."
+      />
     </div>
   );
 }

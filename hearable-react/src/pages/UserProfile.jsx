@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import EditProfileModal from '../components/modals/EditProfileModal';
 import AddSkillModal from '../components/modals/AddSkillModal';
 import ProfileItemModal from '../components/modals/ProfileItemModal';
+import RejectModal from '../components/modals/RejectModal';
 
 import StatusBadge from '../components/common/StatusBadge'; 
 import BackButton from '../components/common/BackButton'; 
@@ -25,17 +26,20 @@ export default function UserProfile() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAddSkillPopup, setShowAddSkillPopup] = useState(false);
   
-  // Modal visibility states
   const [showExperienceModal, setShowExperienceModal] = useState(false);
   const [showCertificatesModal, setShowCertificatesModal] = useState(false);
   const [showAwardsModal, setShowAwardsModal] = useState(false);
   
-  // States to hold the data of the item being edited (null means we are adding a new one)
   const [editExperienceData, setEditExperienceData] = useState(null);
   const [editCertificateData, setEditCertificateData] = useState(null);
   const [editAwardData, setEditAwardData] = useState(null);
 
   const [isUpdatingSkills, setIsUpdatingSkills] = useState(false);
+
+  // Reject Modal States
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+  const [isSubmittingReject, setIsSubmittingReject] = useState(false);
 
   useEffect(() => {
     fetchUser();
@@ -75,17 +79,42 @@ export default function UserProfile() {
     setIsLoading(false);
   }
 
-  // --- General User Actions ---
-  async function handleUpdateStatus(newStatus) {
+  async function handleUpdateStatus(newStatus, reason = '') {
     if (role !== 'admin') return;
+    
+    if (newStatus === 'Rejected' && !reason) {
+      setShowRejectModal(true);
+      return;
+    }
+
+    setIsSubmittingReject(true);
     const updatePayload = { status: newStatus, ...(newStatus === 'Approved' ? { approved_at: new Date().toISOString() } : {}) };
     const { error } = await supabase.from('profiles').update(updatePayload).eq('id', user.id);
+    
     if (!error) {
       setUser({ ...user, status: newStatus });
+      
       if (newStatus === 'Approved') {
-        await supabase.from('notifications').insert([{ user_id: user.id, title: 'Account Approved!', message: 'An administrator has approved your account.', link: '/jobs' }]);
+        await supabase.from('notifications').insert([{ user_id: user.id, title: 'Account Approved!', message: 'An administrator has approved your account.', link: '/jobs', type: 'user' }]);
       }
-    } else alert("Failed to update user status.");
+      
+      if (newStatus === 'Rejected' && reason) {
+        await supabase.from('notifications').insert([{ 
+          user_id: user.id, 
+          title: 'Account Rejected', 
+          message: `Your account approval was rejected. Reason: ${reason}`, 
+          type: 'user' 
+        }]);
+      }
+      
+      if (showRejectModal) {
+        setShowRejectModal(false);
+        setRejectReason('');
+      }
+    } else {
+      alert("Failed to update user status.");
+    }
+    setIsSubmittingReject(false);
   }
 
   async function handleArchiveUser() {
@@ -102,7 +131,6 @@ export default function UserProfile() {
     if (!error) setUser({ ...user, status: 'Pending' });
   }
 
-  // --- Main Profile Skills ---
   async function handleAddSkill(skillObj) {
     if (!skillObj || !user || !currentUser) return;
     setIsUpdatingSkills(true);
@@ -127,7 +155,6 @@ export default function UserProfile() {
     finally { setIsUpdatingSkills(false); }
   }
 
-  // --- Delete Handlers (with Storage Cleanup) ---
   const handleDeleteExperience = async (id) => {
     if (!window.confirm('Are you sure you want to delete this experience?')) return;
     const { error } = await supabase.from('work_experiences').delete().eq('id', id);
@@ -137,13 +164,10 @@ export default function UserProfile() {
 
   const handleDeleteCertificate = async (id, fileUrl) => {
     if (!window.confirm('Are you sure you want to delete this certificate?')) return;
-    
-    // Cleanup storage file
     if (fileUrl && fileUrl.includes('/user_documents/')) {
       const filePath = fileUrl.split('/user_documents/')[1];
       await supabase.storage.from('user_documents').remove([filePath]);
     }
-
     const { error } = await supabase.from('certificates').delete().eq('id', id);
     if (!error) fetchUser();
     else alert('Failed to delete certificate.');
@@ -151,19 +175,15 @@ export default function UserProfile() {
 
   const handleDeleteAward = async (id, fileUrl) => {
     if (!window.confirm('Are you sure you want to delete this award?')) return;
-    
-    // Cleanup storage file
     if (fileUrl && fileUrl.includes('/user_documents/')) {
       const filePath = fileUrl.split('/user_documents/')[1];
       await supabase.storage.from('user_documents').remove([filePath]);
     }
-
     const { error } = await supabase.from('awards').delete().eq('id', id);
     if (!error) fetchUser();
     else alert('Failed to delete award.');
   };
 
-  // --- Modal Openers (Edit Mode) ---
   const openEditExperience = (exp) => { setEditExperienceData(exp); setShowExperienceModal(true); };
   const openEditCertificate = (cert) => { setEditCertificateData(cert); setShowCertificatesModal(true); };
   const openEditAward = (award) => { setEditAwardData(award); setShowAwardsModal(true); };
@@ -180,11 +200,9 @@ export default function UserProfile() {
     <div className="page-container-wide">
       <BackButton />
 
-      {/* Modals */}
       <EditProfileModal isOpen={showEditModal} onClose={() => setShowEditModal(false)} userId={user.id} onSuccess={fetchUser} />
       <AddSkillModal isOpen={showAddSkillPopup} onClose={() => setShowAddSkillPopup(false)} onAddSkill={handleAddSkill} existingSkills={user.skills} isUpdating={isUpdatingSkills} />
       
-      {/* Dynamic Reusable Modals */}
       <ProfileItemModal 
         isOpen={showExperienceModal} 
         onClose={() => { setShowExperienceModal(false); setEditExperienceData(null); }} 
@@ -218,11 +236,15 @@ export default function UserProfile() {
         fallbackName={user.first_name}
         avatarType="user"
         title={fullName}
-        subtitle={<span className="text-primary" style={{ fontWeight: '600' }}>{user.headline || 'Talent Profile'}</span>}
+        subtitle={
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <span className="text-primary" style={{ fontWeight: '600' }}>{user.headline || 'Talent Profile'}</span>
+            {locationText && <span className="text-secondary text-sm" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>📍 {locationText}</span>}
+          </div>
+        }
         actionButton={isOwnProfile ? <button className="btn-outline" onClick={() => setShowEditModal(true)}>Edit Profile</button> : null}
       />
 
-      {/* 🚨 NEW: Admin Controls Panel */}
       {isAdmin && (
         <div className="card p-24 mb-32 flex-col gap-16" style={{ border: '1px solid var(--primary-color)', background: 'var(--card-bg)' }}>
           <div className="flex-between align-center flex-wrap gap-16">
@@ -257,8 +279,22 @@ export default function UserProfile() {
 
       <div className="dashboard-layout">
         <div className="flex-col gap-32">
+
+          {/* 🚨 NEW: About Section */}
+          <div className="card p-24">
+            <div className="flex-between align-center mb-16 gap-16 flex-wrap">
+              <h3 className="m-0">About</h3>
+              {isOwnProfile && (
+                <button className="btn-outline btn-sm" onClick={() => setShowEditModal(true)}>
+                  Edit
+                </button>
+              )}
+            </div>
+            <p className="text-secondary" style={{ lineHeight: '1.7', whiteSpace: 'pre-wrap', margin: 0 }}>
+              {user.description || user.about || "This user hasn't added an about section yet."}
+            </p>
+          </div>
           
-          {/* Skills */}
           <div className="card p-24">
             <div className="flex-between align-center mb-16 gap-16 flex-wrap">
               <h3 className="m-0">Skills</h3>
@@ -278,7 +314,6 @@ export default function UserProfile() {
             </div>
           </div>
 
-          {/* Work Experience */}
           <div className="card p-24">
             <div className="flex-between align-center mb-16 gap-16 flex-wrap">
               <h3 className="m-0">Work Experience</h3>
@@ -311,7 +346,6 @@ export default function UserProfile() {
             ) : <p className="text-secondary m-0">No experience added yet.</p>}
           </div>
 
-          {/* Certificates */}
           <div className="card p-24">
             <div className="flex-between align-center mb-16 gap-16 flex-wrap">
               <h3 className="m-0">Certificates</h3>
@@ -347,7 +381,6 @@ export default function UserProfile() {
             ) : <p className="text-secondary m-0">No certificates added yet.</p>}
           </div>
 
-          {/* Awards */}
           <div className="card p-24">
             <div className="flex-between align-center mb-16 gap-16 flex-wrap">
               <h3 className="m-0">Awards</h3>
@@ -385,15 +418,16 @@ export default function UserProfile() {
 
         </div>
 
-        {/* Sidebar Details */}
         <div style={{ position: 'sticky', top: '90px' }}>
           <div className="card p-24 mb-24">
-            <h3 className="mb-16 m-0">Details</h3>
+            <h3 className="mb-16 m-0">Contact Details</h3>
+            
             <div className="flex-col gap-16">
               <div style={{ paddingBottom: '12px', borderBottom: '1px solid var(--border-color)' }}>
-                <span className="text-sm text-secondary" style={{ display: 'block', marginBottom: '4px' }}>Location</span>
-                <strong style={{ fontSize: '1rem', display: 'block' }}>{locationText || 'Not specified'}</strong>
+                <span className="text-sm text-secondary" style={{ display: 'block', marginBottom: '4px' }}>Email Address</span>
+                <strong style={{ fontSize: '1rem', display: 'block', wordBreak: 'break-all' }}>{user.email || 'Not specified'}</strong>
               </div>
+
               <div style={{ paddingBottom: '12px', borderBottom: '1px solid var(--border-color)' }}>
                 <span className="text-sm text-secondary" style={{ display: 'block', marginBottom: '4px' }}>Contact Number</span>
                 <strong style={{ fontSize: '1rem', display: 'block' }}>{user.contact_number || 'Not specified'}</strong>
@@ -411,6 +445,17 @@ export default function UserProfile() {
           <JobPreferencesWidget user={user} isOwnProfile={isOwnProfile} onUpdate={fetchUser} />
         </div>
       </div>
+
+      <RejectModal 
+        isOpen={showRejectModal}
+        onClose={() => setShowRejectModal(false)}
+        onSubmit={(reason) => handleUpdateStatus('Rejected', reason)}
+        rejectReason={rejectReason}
+        setRejectReason={setRejectReason}
+        isSubmitting={isSubmittingReject}
+        title="Reject User Account"
+        placeholder="Provide a reason for rejecting this user (this will be sent to their email)..."
+      />
     </div>
   );
 }

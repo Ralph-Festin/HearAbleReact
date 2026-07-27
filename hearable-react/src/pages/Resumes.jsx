@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import StatusBadge from '../components/common/StatusBadge';
 import Avatar from '../components/common/Avatar';
 import SearchBar from '../components/common/SearchBar';
+import RejectModal from '../components/modals/RejectModal';
 
 export default function Resumes() {
   const { role } = useAuth();
@@ -20,7 +21,11 @@ export default function Resumes() {
 
   const [previewResumeId, setPreviewResumeId] = useState(null);
 
-  // Strict Admin Guard
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+  const [isSubmittingReject, setIsSubmittingReject] = useState(false);
+  const [resumeToReject, setResumeToReject] = useState(null);
+
   useEffect(() => {
     if (role !== 'admin') {
       navigate('/');
@@ -31,7 +36,6 @@ export default function Resumes() {
 
   useEffect(() => setCurrentPage(1), [searchQuery, activeTab]);
 
-  // 🚨 RESTORED: Back to the original, guaranteed-to-work dual queries
   async function fetchResumes() {
     setIsLoading(true);
     const { data: resumesData } = await supabase.from('resumes').select('*').order('created_at', { ascending: false });
@@ -51,11 +55,40 @@ export default function Resumes() {
     setIsLoading(false);
   }
 
-  async function handleUpdateStatus(id, newStatus) {
+  async function handleUpdateStatus(id, newStatus, reason = '') {
+    if (newStatus === 'Rejected' && !reason) {
+      setResumeToReject(id);
+      setShowRejectModal(true);
+      return;
+    }
+
+    setIsSubmittingReject(true);
     const { error } = await supabase.from('resumes').update({ status: newStatus }).eq('id', id);
+    
     if (!error) {
       setResumes(resumes.map(r => r.id === id ? { ...r, status: newStatus } : r));
-    } else alert('Failed to update resume status');
+      
+      if (newStatus === 'Rejected' && reason) {
+        const resume = resumes.find(r => r.id === id);
+        if (resume) {
+          await supabase.from('notifications').insert([{
+            user_id: resume.user_id,
+            title: 'Resume Rejected',
+            message: `Your resume "${resume.title}" was rejected. Reason: ${reason}`,
+            type: 'user'
+          }]);
+        }
+      }
+
+      if (showRejectModal) {
+        setShowRejectModal(false);
+        setRejectReason('');
+        setResumeToReject(null);
+      }
+    } else {
+      alert('Failed to update resume status');
+    }
+    setIsSubmittingReject(false);
   }
 
   const processedResumes = resumes.filter(resume => {
@@ -155,7 +188,6 @@ export default function Resumes() {
         </div>
       )}
 
-      {/* --- PREVIEW MODAL --- */}
       {previewResume && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '20px' }}>
           
@@ -209,6 +241,16 @@ export default function Resumes() {
         </div>
       )}
 
+      <RejectModal 
+        isOpen={showRejectModal}
+        onClose={() => setShowRejectModal(false)}
+        onSubmit={(reason) => handleUpdateStatus(resumeToReject, 'Rejected', reason)}
+        rejectReason={rejectReason}
+        setRejectReason={setRejectReason}
+        isSubmitting={isSubmittingReject}
+        title="Reject Resume"
+        placeholder="Provide a reason for rejecting this resume..."
+      />
     </div>
   );
 }

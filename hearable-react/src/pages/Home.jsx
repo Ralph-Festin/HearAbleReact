@@ -64,7 +64,6 @@ export default function Home() {
         
         supabase.from('profiles').select('id, first_name, last_name, created_at', { count: 'exact' }).eq('status', 'Pending').order('created_at', { ascending: false }).limit(3),
         
-        // 🚨 UPDATED: Fetch FULL job data and FULL company data for the JobDetailsPane component
         supabase.from('jobs').select('*, companies(*)', { count: 'exact' }).eq('status', 'Pending').order('created_at', { ascending: false }).limit(3),
         
         supabase.from('resumes').select('id, title, created_at, file_url', { count: 'exact' }).eq('status', 'Pending').order('created_at', { ascending: false }).limit(3)
@@ -81,7 +80,6 @@ export default function Home() {
 
       setRecentPendingUsers((pUsers || []).map(u => ({ id: u.id, title: formatFullName(u.first_name, u.last_name, 'Unknown User'), created_at: u.created_at })));
       
-      // 🚨 UPDATED: Passing the entire raw object straight to state so it can be passed to the component
       setRecentPendingJobs(pJobs || []);
       
       setRecentPendingResumes((pResumes || []).map(r => ({ id: r.id, title: r.title || 'Untitled Resume', created_at: r.created_at, file_url: r.file_url })));
@@ -132,6 +130,7 @@ export default function Home() {
       return;
     }
 
+    // 🚨 UPDATED: Increased limit buffer to allow for filtering
     const { data: jobsData } = await supabase
       .from('jobs')
       .select(`
@@ -141,12 +140,20 @@ export default function Home() {
       `)
       .eq('status', 'Approved')
       .order('created_at', { ascending: false })
-      .limit(4);
+      .limit(20);
 
     if (jobsData) {
       const isGuest = role === 'guest';
 
-      const formattedJobs = jobsData.map(job => ({
+      // 🚨 UPDATED: Filter out expired jobs and slice down to 4
+      const validRecentJobs = jobsData.filter(job => {
+        const isDeadlinePassed = job.closing_date ? new Date(job.closing_date) < new Date(new Date().setHours(0,0,0,0)) : false;
+        const isOwner = activeId && job.company_id === activeId;
+        if (role === 'admin' || isOwner) return true;
+        return !isDeadlinePassed;
+      }).slice(0, 4);
+
+      const formattedJobs = validRecentJobs.map(job => ({
         ...job, 
         location: isGuest ? 'Sign in to view location' : (job.locations?.city || job.companies?.locations?.city || 'Location not specified'),
         company: isGuest ? 'Company Hidden' : (job.companies?.name || 'Unknown Company'),
@@ -192,6 +199,14 @@ export default function Home() {
   if (isLoading && role === 'admin') {
      return <div className="page-container-wide mt-32"><LoadingSpinner message="Loading dashboard..." /></div>;
   }
+
+  // 🚨 UPDATED: Ensure all jobs pushed to the widget are valid
+  const validAllJobs = (allJobs || []).filter(job => {
+    const isDeadlinePassed = job.closing_date ? new Date(job.closing_date) < new Date(new Date().setHours(0,0,0,0)) : false;
+    const isOwner = user && job.company_id === user.id;
+    if (role === 'admin' || isOwner) return true;
+    return job.status === 'Approved' && !isDeadlinePassed;
+  });
 
   return (
     <div className="page-container-wide">
@@ -246,8 +261,8 @@ export default function Home() {
 
           {role !== 'admin' && (
             <div className="flex-col gap-24">
-              {(role === 'user' || role === 'pending_user') && !isJobsLoading && allJobs?.length > 0 && (
-                <MatchedJobsWidget jobs={allJobs} onSelectJob={handleGoToJob} />
+              {(role === 'user' || role === 'pending_user') && !isJobsLoading && validAllJobs.length > 0 && (
+                <MatchedJobsWidget jobs={validAllJobs} onSelectJob={handleGoToJob} />
               )}
 
               <div className="card">

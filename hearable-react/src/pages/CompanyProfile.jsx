@@ -46,16 +46,24 @@ export default function CompanyProfile() {
           .order('created_at', { ascending: false });
 
         if (jobsData) {
-          const mappedJobs = jobsData.map(job => ({
-            ...job,
-            company: companyData.name,
-            date: formatStandardDate(job.created_at),
-            is_deaf_accessible: companyData.is_deaf_accessible,
-            has_interpreters: companyData.has_interpreters,
-            has_trained_staff: companyData.has_trained_staff,
-            has_visual_alarms: companyData.has_visual_alarms,
-            has_captioning: companyData.has_captioning
-          }));
+          // 🚨 UPDATED: Filter out expired jobs for non-admins and non-owners
+          const mappedJobs = jobsData
+            .filter(job => {
+              const isDeadlinePassed = job.closing_date ? new Date(job.closing_date) < new Date(new Date().setHours(0,0,0,0)) : false;
+              const isOwner = currentUser && job.company_id === currentUser.id;
+              if (role === 'admin' || isOwner) return true;
+              return !isDeadlinePassed;
+            })
+            .map(job => ({
+              ...job,
+              company: companyData.name,
+              date: formatStandardDate(job.created_at),
+              is_deaf_accessible: companyData.is_deaf_accessible,
+              has_interpreters: companyData.has_interpreters,
+              has_trained_staff: companyData.has_trained_staff,
+              has_visual_alarms: companyData.has_visual_alarms,
+              has_captioning: companyData.has_captioning
+            }));
           setCompanyJobs(mappedJobs);
         }
       }
@@ -110,7 +118,6 @@ export default function CompanyProfile() {
   const isOwnProfile = currentUser?.id === id;
   const isAdmin = role === 'admin';
 
-  // 🚨 STRICT BLOCK: Prevent standard users and guests from viewing a disabled profile via direct URL
   if (!isAdmin && !isOwnProfile && (company.status === 'Archived' || company.status === 'Rejected')) {
     return (
       <div className="page-container-wide text-center mt-32">
@@ -151,7 +158,6 @@ export default function CompanyProfile() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
             {company.name}
             
-            {/* 🚨 NEW: Alert the company owner that their profile is disabled */}
             {isOwnProfile && ['Archived', 'Rejected'].includes(company.status) && (
               <span style={{ 
                 background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', 
