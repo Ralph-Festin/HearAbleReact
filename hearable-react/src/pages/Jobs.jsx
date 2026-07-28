@@ -32,7 +32,7 @@ export default function Jobs() {
   const [selectedResumeId, setSelectedResumeId] = useState('');
   
   const [newResumeTitle, setNewResumeTitle] = useState('');
-  const [selectedFile, setSelectedFile] = useState(null); // 🚨 NEW: Added file state to match UserResumes.jsx
+  const [selectedFile, setSelectedFile] = useState(null); 
   const [isUploadingResume, setIsUploadingResume] = useState(false);
   
   const [applyModalTab, setApplyModalTab] = useState('select'); 
@@ -47,7 +47,7 @@ export default function Jobs() {
   const [filterType, setFilterType] = useState('All');
   const [filterDate, setFilterDate] = useState('All');
   
-  const [adminStatusFilter, setAdminStatusFilter] = useState(location.state?.activeTab || (role === 'admin' ? 'Approved' : 'Active')); 
+  const [adminStatusFilter, setAdminStatusFilter] = useState(location.state?.activeTab || (role === 'admin' ? 'Approved' : 'Approved')); 
 
   useEffect(() => {
     if (location.state?.activeTab) {
@@ -79,26 +79,29 @@ export default function Jobs() {
         ? new Date(job.closing_date) < new Date(new Date().setHours(0,0,0,0)) 
         : false;
 
-      const isOwner = currentUser && job.company_id === currentUser.id;
+      const relatedCompany = companies?.find(c => c.id === job.company_id);
+      const isCompanyActive = relatedCompany && !['Archived', 'Rejected'].includes(relatedCompany.status);
 
       if (role === 'admin') {
         if (adminStatusFilter === 'Archived') {
-          if (!isDeadlinePassed && job.status !== 'Archived') return false;
+          // Admin Archived tab: Show if job is archived, expired, OR the company is archived/rejected
+          if (!isDeadlinePassed && job.status !== 'Archived' && isCompanyActive) return false;
         } else if (adminStatusFilter !== 'All') {
           if (job.status !== adminStatusFilter) return false;
-          if (adminStatusFilter === 'Approved' && isDeadlinePassed) return false; 
+          // Hide expired or inactive-company jobs from the Approved tab
+          if (adminStatusFilter === 'Approved' && (isDeadlinePassed || !isCompanyActive)) return false; 
         }
       } else {
         if (job.status !== 'Approved') return false;
         
+        // 🚨 NEW: Temporarily hide jobs if the company is archived or rejected
+        if (!isCompanyActive) return false;
+        
         const userApp = appliedJobs.find(a => a.job_id === job.id);
         const isAdvancedCandidate = userApp && ['Interviewing', 'Approved', 'Hired'].includes(userApp.status);
 
-        if (adminStatusFilter === 'Archived') {
-          if (!isDeadlinePassed) return false;
-        } else {
-          if (isDeadlinePassed && !isOwner && !isAdvancedCandidate) return false;
-        }
+        // Hide expired jobs unless the candidate is actively interviewing
+        if (isDeadlinePassed && !isAdvancedCandidate) return false;
       }
 
       const matchesSearch = (job.title || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -229,7 +232,6 @@ export default function Jobs() {
     setIsApplying(false);
   }
 
-  // 🚨 UPDATED: Now uses Supabase Storage PDF upload to exactly match UserResumes.jsx
   async function handleUploadResume(e) {
     e.preventDefault();
     if (!newResumeTitle || !selectedFile) return alert("Please provide a title and select a PDF file.");
@@ -408,10 +410,6 @@ export default function Jobs() {
     </div>
   );
 
-  const tabs = role === 'admin' 
-    ? ['All', 'Pending', 'Approved', 'Rejected', 'Archived']
-    : ['Active', 'Archived'];
-
   return (
     <div className="page-container-wide" style={{ paddingBottom: '24px' }}>
 
@@ -440,23 +438,26 @@ export default function Jobs() {
           </div>
         </div>
 
-        <div className="flex-row gap-8 mb-24" style={{ overflowX: 'auto', paddingBottom: '4px', borderBottom: '1px solid var(--border-color)' }}>
-          {tabs.map(tab => (
-            <button
-              key={tab} 
-              title={`Filter jobs by ${tab} status`}
-              onClick={() => { setAdminStatusFilter(tab); setSelectedJobId(null); }}
-              style={{
-                padding: '8px 20px', border: 'none', background: 'none',
-                borderBottom: adminStatusFilter === tab ? '2px solid var(--primary-color)' : '2px solid transparent',
-                color: adminStatusFilter === tab ? 'var(--primary-color)' : 'var(--secondary-text)',
-                fontWeight: adminStatusFilter === tab ? '600' : '400', cursor: 'pointer', fontSize: '1rem',
-              }}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
+        {/* 🚨 UPDATED: Tab bar is only shown for admins again */}
+        {role === 'admin' && (
+          <div className="flex-row gap-8 mb-24" style={{ overflowX: 'auto', paddingBottom: '4px', borderBottom: '1px solid var(--border-color)' }}>
+            {['All', 'Pending', 'Approved', 'Rejected', 'Archived'].map(tab => (
+              <button
+                key={tab} 
+                title={`Filter jobs by ${tab} status`}
+                onClick={() => { setAdminStatusFilter(tab); setSelectedJobId(null); }}
+                style={{
+                  padding: '8px 20px', border: 'none', background: 'none',
+                  borderBottom: adminStatusFilter === tab ? '2px solid var(--primary-color)' : '2px solid transparent',
+                  color: adminStatusFilter === tab ? 'var(--primary-color)' : 'var(--secondary-text)',
+                  fontWeight: adminStatusFilter === tab ? '600' : '400', cursor: 'pointer', fontSize: '1rem',
+                }}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+        )}
         
         <div className="mb-16">
           <SearchBar 
@@ -595,7 +596,6 @@ export default function Jobs() {
                       ) : (
                         <div className="flex-col gap-16">
                           
-                          {/* 🚨 NEW: Added visual empty state styled like UserResumes.jsx */}
                           {approvedResumes.length === 0 && pendingResumes.length === 0 && (
                             <div className="card text-center text-secondary p-32 mb-8" style={{ background: 'var(--bg-color)', border: '1px dashed var(--border-color)', boxShadow: 'none' }}>
                               <div style={{ fontSize: '2.5rem', marginBottom: '16px' }}>📄</div>
@@ -612,7 +612,6 @@ export default function Jobs() {
                             </div>
                           )}
 
-                          {/* 🚨 UPDATED: File upload form matches UserResumes.jsx */}
                           <form onSubmit={handleUploadResume} className="flex-col gap-16">
                             <div>
                               <label className="block mb-8 font-medium text-sm">Resume Title</label>

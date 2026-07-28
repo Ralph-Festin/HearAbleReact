@@ -135,7 +135,7 @@ export default function Home() {
       .select(`
         *,
         locations ( city ),
-        companies ( name, is_deaf_accessible, has_interpreters, has_trained_staff, has_visual_alarms, has_captioning, locations ( city ) )
+        companies ( name, status, is_deaf_accessible, has_interpreters, has_trained_staff, has_visual_alarms, has_captioning, locations ( city ) )
       `)
       .eq('status', 'Approved')
       .order('created_at', { ascending: false })
@@ -144,11 +144,14 @@ export default function Home() {
     if (jobsData) {
       const isGuest = role === 'guest';
 
-      // 🚨 UPDATED: Disallow bypass for expired jobs based on ownership
       const validRecentJobs = jobsData.filter(job => {
         const isDeadlinePassed = job.closing_date ? new Date(job.closing_date) < new Date(new Date().setHours(0,0,0,0)) : false;
+        
+        // 🚨 NEW: Filter out jobs from archived companies
+        const isCompanyActive = job.companies && !['Archived', 'Rejected'].includes(job.companies.status);
+        
         if (role === 'admin') return true;
-        return !isDeadlinePassed;
+        return !isDeadlinePassed && isCompanyActive;
       }).slice(0, 4);
 
       const formattedJobs = validRecentJobs.map(job => ({
@@ -198,11 +201,14 @@ export default function Home() {
      return <div className="page-container-wide mt-32"><LoadingSpinner message="Loading dashboard..." /></div>;
   }
 
-  // 🚨 UPDATED: Disallow bypass for expired jobs in matched lists based on ownership
   const validAllJobs = (allJobs || []).filter(job => {
     const isDeadlinePassed = job.closing_date ? new Date(job.closing_date) < new Date(new Date().setHours(0,0,0,0)) : false;
+    
+    // 🚨 NEW: Filter out jobs from archived companies
+    const isCompanyActive = job.companies && !['Archived', 'Rejected'].includes(job.companies.status);
+
     if (role === 'admin') return true;
-    return job.status === 'Approved' && !isDeadlinePassed;
+    return job.status === 'Approved' && !isDeadlinePassed && isCompanyActive;
   });
 
   return (

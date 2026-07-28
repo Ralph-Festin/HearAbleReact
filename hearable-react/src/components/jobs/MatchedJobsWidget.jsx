@@ -9,9 +9,12 @@ export function MatchedJobsWidget({ jobs, onSelectJob }) {
 
   const matchedJobs = (jobs || [])
     .filter(job => {
-      // 🚨 NEW: Filter out jobs that have expired
       const isExpired = job.closing_date ? new Date(job.closing_date) < new Date(new Date().setHours(0,0,0,0)) : false;
-      return job.matchScore && job.matchScore > 0 && !isExpired;
+      
+      // 🚨 NEW: Filter out jobs from archived companies
+      const isCompanyActive = job.companies && !['Archived', 'Rejected'].includes(job.companies.status);
+      
+      return job.matchScore && job.matchScore > 0 && !isExpired && isCompanyActive;
     })
     .sort((a, b) => b.matchScore - a.matchScore)
     .slice(0, 6); 
