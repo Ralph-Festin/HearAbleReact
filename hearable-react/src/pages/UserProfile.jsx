@@ -280,7 +280,7 @@ export default function UserProfile() {
       <div className="dashboard-layout">
         <div className="flex-col gap-32">
 
-          {/* 🚨 NEW: About Section */}
+          {/* About Section */}
           <div className="card p-24">
             <div className="flex-between align-center mb-16 gap-16 flex-wrap">
               <h3 className="m-0">About</h3>
@@ -291,7 +291,8 @@ export default function UserProfile() {
               )}
             </div>
             <p className="text-secondary" style={{ lineHeight: '1.7', whiteSpace: 'pre-wrap', margin: 0 }}>
-              {user.description || user.about || "This user hasn't added an about section yet."}
+              {/* 🚨 CHANGED: Reads directly from user.bio */}
+              {user.bio || "This user hasn't added an about section yet."}
             </p>
           </div>
           

@@ -9,7 +9,7 @@ export default function EditProfileModal({ isOpen, onClose, userId, onSuccess })
     last_name: '',
     profile_pic: '',
     headline: '',
-    description: '', // 🚨 NEW: Added for the 'About Me' section
+    bio: '', // 🚨 CHANGED: Mapped to the actual database column 'bio'
     city: '',
     country: '',
     contact_number: '',
@@ -39,7 +39,7 @@ export default function EditProfileModal({ isOpen, onClose, userId, onSuccess })
         last_name: data.last_name || '',
         profile_pic: data.profile_pic || '',
         headline: data.headline || '',
-        description: data.description || data.about || '', // 🚨 NEW: Fetches existing about data
+        bio: data.bio || '', // 🚨 CHANGED: Fetches from 'bio'
         city: data.locations?.city || '',
         country: data.locations?.country || '',
         contact_number: data.contact_number || '',
@@ -86,7 +86,7 @@ export default function EditProfileModal({ isOpen, onClose, userId, onSuccess })
         last_name: formData.last_name,
         profile_pic: formData.profile_pic,
         headline: formData.headline,
-        description: formData.description, // 🚨 NEW: Injects About Me into database update
+        bio: formData.bio, // 🚨 CHANGED: Saves to 'bio'
         contact_number: formData.contact_number,
         portfolio_url: formData.portfolio_url
       };
@@ -164,12 +164,11 @@ export default function EditProfileModal({ isOpen, onClose, userId, onSuccess })
               <input type="text" name="headline" value={formData.headline} onChange={handleChange} placeholder="e.g. Senior Frontend Developer" className="input-field" style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)' }} />
             </div>
 
-            {/* 🚨 NEW: About Me Text Area */}
             <div className="flex-col gap-8">
               <label className="font-medium">About Me</label>
               <textarea 
-                name="description" 
-                value={formData.description} 
+                name="bio"  /* 🚨 CHANGED to "bio" */
+                value={formData.bio} 
                 onChange={handleChange} 
                 placeholder="Tell us a little bit about yourself..." 
                 className="input-field" 
