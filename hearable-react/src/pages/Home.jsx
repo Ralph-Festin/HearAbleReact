@@ -130,7 +130,6 @@ export default function Home() {
       return;
     }
 
-    // 🚨 UPDATED: Increased limit buffer to allow for filtering
     const { data: jobsData } = await supabase
       .from('jobs')
       .select(`
@@ -145,11 +144,10 @@ export default function Home() {
     if (jobsData) {
       const isGuest = role === 'guest';
 
-      // 🚨 UPDATED: Filter out expired jobs and slice down to 4
+      // 🚨 UPDATED: Disallow bypass for expired jobs based on ownership
       const validRecentJobs = jobsData.filter(job => {
         const isDeadlinePassed = job.closing_date ? new Date(job.closing_date) < new Date(new Date().setHours(0,0,0,0)) : false;
-        const isOwner = activeId && job.company_id === activeId;
-        if (role === 'admin' || isOwner) return true;
+        if (role === 'admin') return true;
         return !isDeadlinePassed;
       }).slice(0, 4);
 
@@ -200,11 +198,10 @@ export default function Home() {
      return <div className="page-container-wide mt-32"><LoadingSpinner message="Loading dashboard..." /></div>;
   }
 
-  // 🚨 UPDATED: Ensure all jobs pushed to the widget are valid
+  // 🚨 UPDATED: Disallow bypass for expired jobs in matched lists based on ownership
   const validAllJobs = (allJobs || []).filter(job => {
     const isDeadlinePassed = job.closing_date ? new Date(job.closing_date) < new Date(new Date().setHours(0,0,0,0)) : false;
-    const isOwner = user && job.company_id === user.id;
-    if (role === 'admin' || isOwner) return true;
+    if (role === 'admin') return true;
     return job.status === 'Approved' && !isDeadlinePassed;
   });
 

@@ -46,12 +46,11 @@ export default function CompanyProfile() {
           .order('created_at', { ascending: false });
 
         if (jobsData) {
-          // 🚨 UPDATED: Filter out expired jobs for non-admins and non-owners
+          // 🚨 UPDATED: Removed ownership bypass. Expired jobs hide entirely on profile.
           const mappedJobs = jobsData
             .filter(job => {
               const isDeadlinePassed = job.closing_date ? new Date(job.closing_date) < new Date(new Date().setHours(0,0,0,0)) : false;
-              const isOwner = currentUser && job.company_id === currentUser.id;
-              if (role === 'admin' || isOwner) return true;
+              if (role === 'admin') return true;
               return !isDeadlinePassed;
             })
             .map(job => ({

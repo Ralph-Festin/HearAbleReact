@@ -8,7 +8,11 @@ export function MatchedJobsWidget({ jobs, onSelectJob }) {
   const { user } = useAuth();
 
   const matchedJobs = (jobs || [])
-    .filter(job => job.matchScore && job.matchScore > 0)
+    .filter(job => {
+      // 🚨 NEW: Filter out jobs that have expired
+      const isExpired = job.closing_date ? new Date(job.closing_date) < new Date(new Date().setHours(0,0,0,0)) : false;
+      return job.matchScore && job.matchScore > 0 && !isExpired;
+    })
     .sort((a, b) => b.matchScore - a.matchScore)
     .slice(0, 6); 
 
@@ -30,7 +34,6 @@ export function MatchedJobsWidget({ jobs, onSelectJob }) {
     <div className="card mb-24 p-24">
       <div className="flex-between align-center mb-16" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
         <h3 className="m-0">Top Matches For You</h3>
-        {/* 🚨 RESTORED: View All Link */}
         <button 
           onClick={() => navigate('/jobs')} 
           style={{ background: 'transparent', border: 'none', color: 'var(--primary-color)', fontSize: '0.9rem', fontWeight: 'bold', cursor: 'pointer', padding: 0 }}
@@ -48,7 +51,6 @@ export function MatchedJobsWidget({ jobs, onSelectJob }) {
             <div 
               key={job.id} 
               className="flex-between align-center mobile-stack" 
-              // 🚨 COMPACT SPACING: Reduced padding from 20px to 16px
               style={{ padding: '16px 0', borderBottom: index !== matchedJobs.length - 1 ? '1px solid var(--border-color)' : 'none', cursor: 'pointer' }}
               onClick={() => onSelectJob(job.id)}
             >

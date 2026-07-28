@@ -78,8 +78,6 @@ export default function Jobs() {
         ? new Date(job.closing_date) < new Date(new Date().setHours(0,0,0,0)) 
         : false;
 
-      const isOwner = currentUser && job.company_id === currentUser.id;
-
       if (role === 'admin') {
         if (adminStatusFilter !== 'All' && job.status !== adminStatusFilter) return false;
       } else {
@@ -88,7 +86,8 @@ export default function Jobs() {
         const userApp = appliedJobs.find(a => a.job_id === job.id);
         const isAdvancedCandidate = userApp && ['Interviewing', 'Approved', 'Hired'].includes(userApp.status);
 
-        if (isDeadlinePassed && !isOwner && !isAdvancedCandidate) return false;
+        // 🚨 UPDATED: Removed `isOwner` exception. Companies will not see their expired jobs here.
+        if (isDeadlinePassed && !isAdvancedCandidate) return false;
       }
 
       const matchesSearch = (job.title || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
