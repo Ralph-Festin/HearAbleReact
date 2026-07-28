@@ -262,7 +262,6 @@ export default function Applicants() {
       ) : (
         <div className="mb-32 flex-col align-start">
           <BackButton onClick={() => { 
-            // 🚨 UPDATED: Explicitly navigate to /jobs with the exact job ID if they came from there
             if (location.state?.filterJobId) {
               navigate('/jobs', { state: { selectedJobId: location.state.filterJobId } });
             } else {
@@ -418,7 +417,7 @@ function ApplicantCard({ app, role, onInspectClick }) {
           const getStage = (status) => {
             if (['Hired', 'Rejected'].includes(status)) return 3;
             if (status === 'Interviewing') return 2;
-            return 1; // Pending / Under Review / Null
+            return 1; 
           };
           
           const stage = getStage(app.status);
@@ -527,22 +526,26 @@ function InspectApplicantModal({ isOpen, onClose, app, navigate, handleViewResum
               </div>
             ) : (
               <div className="flex-col gap-12">
+                {/* 🚨 UPDATED: Removed Reject from Step 2, only allows scheduling interview */}
                 {(app.status === 'Pending' || app.status === 'Under Review' || !app.status) && (
                   <>
                     <p className="text-sm m-0"><strong>Step 2:</strong> Invite this candidate to an interview to learn more about them.</p>
                     <div className="flex-row gap-8">
                       <button className="btn-black" onClick={() => setPendingAction('Interviewing')}>Schedule Interview</button>
-                      <button className="btn-outline" onClick={() => setPendingAction('Rejected')} style={{color: '#dc2626', borderColor: '#fecaca'}}>Reject</button>
                     </div>
                   </>
                 )}
                 
+                {/* 🚨 UPDATED: Allowed infinite Interview scheduling, plus Decision routing */}
                 {app.status === 'Interviewing' && (
                   <>
-                    <p className="text-sm m-0"><strong>Step 3:</strong> After the interview, what is your final decision?</p>
-                    <div className="flex-row gap-8">
-                      <button className="btn-black" style={{background: '#10b981', borderColor: '#10b981'}} onClick={() => setPendingAction('Hired')}>Hire Candidate</button>
-                      <button className="btn-outline" onClick={() => setPendingAction('Rejected')} style={{color: '#dc2626', borderColor: '#fecaca'}}>Reject</button>
+                    <p className="text-sm m-0"><strong>Step 3:</strong> Schedule another interview or make your final decision.</p>
+                    <div className="flex-col gap-8">
+                      <button className="btn-outline w-full" onClick={() => setPendingAction('Interviewing')}>Schedule Another Interview</button>
+                      <div className="flex-row gap-8 mt-8">
+                        <button className="btn-black flex-grow" style={{background: '#10b981', borderColor: '#10b981'}} onClick={() => setPendingAction('Hired')}>Hire Candidate</button>
+                        <button className="btn-outline flex-grow" onClick={() => setPendingAction('Rejected')} style={{color: '#dc2626', borderColor: '#fecaca'}}>Reject</button>
+                      </div>
                     </div>
                   </>
                 )}

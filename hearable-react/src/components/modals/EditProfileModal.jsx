@@ -9,6 +9,7 @@ export default function EditProfileModal({ isOpen, onClose, userId, onSuccess })
     last_name: '',
     profile_pic: '',
     headline: '',
+    description: '', // 🚨 NEW: Added for the 'About Me' section
     city: '',
     country: '',
     contact_number: '',
@@ -38,6 +39,7 @@ export default function EditProfileModal({ isOpen, onClose, userId, onSuccess })
         last_name: data.last_name || '',
         profile_pic: data.profile_pic || '',
         headline: data.headline || '',
+        description: data.description || data.about || '', // 🚨 NEW: Fetches existing about data
         city: data.locations?.city || '',
         country: data.locations?.country || '',
         contact_number: data.contact_number || '',
@@ -84,6 +86,7 @@ export default function EditProfileModal({ isOpen, onClose, userId, onSuccess })
         last_name: formData.last_name,
         profile_pic: formData.profile_pic,
         headline: formData.headline,
+        description: formData.description, // 🚨 NEW: Injects About Me into database update
         contact_number: formData.contact_number,
         portfolio_url: formData.portfolio_url
       };
@@ -159,6 +162,19 @@ export default function EditProfileModal({ isOpen, onClose, userId, onSuccess })
             <div className="flex-col gap-8">
               <label className="font-medium">Headline</label>
               <input type="text" name="headline" value={formData.headline} onChange={handleChange} placeholder="e.g. Senior Frontend Developer" className="input-field" style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)' }} />
+            </div>
+
+            {/* 🚨 NEW: About Me Text Area */}
+            <div className="flex-col gap-8">
+              <label className="font-medium">About Me</label>
+              <textarea 
+                name="description" 
+                value={formData.description} 
+                onChange={handleChange} 
+                placeholder="Tell us a little bit about yourself..." 
+                className="input-field" 
+                style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', minHeight: '100px', resize: 'vertical' }} 
+              />
             </div>
 
             <div className="flex-col gap-8">

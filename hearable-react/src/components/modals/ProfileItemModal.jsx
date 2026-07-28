@@ -81,8 +81,9 @@ export default function ProfileItemModal({
     const selectedFile = e.target.files[0];
     if (!selectedFile) return;
 
-    if (selectedFile.size > 307200) { 
-      alert("File size exceeds 300KB.");
+    // 🚨 UPDATED: Increased limit to 1MB (1048576 bytes)
+    if (selectedFile.size > 1048576) { 
+      alert("File size exceeds 1MB.");
       e.target.value = ''; setFile(null); return;
     }
     if (selectedFile.type !== 'application/pdf') {
@@ -152,7 +153,7 @@ export default function ProfileItemModal({
         }));
         await supabase.from(config.junctionTable).insert(skillInserts);
 
-        // 2. 🚨 NEW: Automatically sync these skills to the user's main profile skills
+        // 2. Automatically sync these skills to the user's main profile skills
         const profileSkillsToSync = selectedSkills.map(skill => ({
           profile_id: userId,
           skill_id: skill.id
@@ -194,7 +195,8 @@ export default function ProfileItemModal({
 
           {allowFileUpload && (
             <div>
-              <label className="font-bold text-sm block mb-8">Attach PDF (Max 300KB)</label>
+              {/* 🚨 UPDATED: Label text updated to reflect 1MB limit */}
+              <label className="font-bold text-sm block mb-8">Attach PDF (Max 1MB)</label>
               {currentFileUrl && <p className="text-sm text-secondary mt-0 mb-8">Current file exists. Uploading a new one will replace it.</p>}
               <input type="file" accept="application/pdf" onChange={handleFileChange} className="search-input w-full" style={{ padding: '8px' }} />
             </div>
