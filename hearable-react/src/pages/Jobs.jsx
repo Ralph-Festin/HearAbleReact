@@ -30,8 +30,9 @@ export default function Jobs() {
   const [userResumes, setUserResumes] = useState([]);
   const [isLoadingResumes, setIsLoadingResumes] = useState(false);
   const [selectedResumeId, setSelectedResumeId] = useState('');
+  
   const [newResumeTitle, setNewResumeTitle] = useState('');
-  const [newResumeUrl, setNewResumeUrl] = useState('');
+  const [selectedFile, setSelectedFile] = useState(null); // 🚨 NEW: Added file state to match UserResumes.jsx
   const [isUploadingResume, setIsUploadingResume] = useState(false);
   
   const [applyModalTab, setApplyModalTab] = useState('select'); 
@@ -46,7 +47,7 @@ export default function Jobs() {
   const [filterType, setFilterType] = useState('All');
   const [filterDate, setFilterDate] = useState('All');
   
-  const [adminStatusFilter, setAdminStatusFilter] = useState(location.state?.activeTab || 'Approved'); 
+  const [adminStatusFilter, setAdminStatusFilter] = useState(location.state?.activeTab || (role === 'admin' ? 'Approved' : 'Active')); 
 
   useEffect(() => {
     if (location.state?.activeTab) {
@@ -78,16 +79,26 @@ export default function Jobs() {
         ? new Date(job.closing_date) < new Date(new Date().setHours(0,0,0,0)) 
         : false;
 
+      const isOwner = currentUser && job.company_id === currentUser.id;
+
       if (role === 'admin') {
-        if (adminStatusFilter !== 'All' && job.status !== adminStatusFilter) return false;
+        if (adminStatusFilter === 'Archived') {
+          if (!isDeadlinePassed && job.status !== 'Archived') return false;
+        } else if (adminStatusFilter !== 'All') {
+          if (job.status !== adminStatusFilter) return false;
+          if (adminStatusFilter === 'Approved' && isDeadlinePassed) return false; 
+        }
       } else {
         if (job.status !== 'Approved') return false;
         
         const userApp = appliedJobs.find(a => a.job_id === job.id);
         const isAdvancedCandidate = userApp && ['Interviewing', 'Approved', 'Hired'].includes(userApp.status);
 
-        // 🚨 UPDATED: Removed `isOwner` exception. Companies will not see their expired jobs here.
-        if (isDeadlinePassed && !isAdvancedCandidate) return false;
+        if (adminStatusFilter === 'Archived') {
+          if (!isDeadlinePassed) return false;
+        } else {
+          if (isDeadlinePassed && !isOwner && !isAdvancedCandidate) return false;
+        }
       }
 
       const matchesSearch = (job.title || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -218,26 +229,51 @@ export default function Jobs() {
     setIsApplying(false);
   }
 
+  // 🚨 UPDATED: Now uses Supabase Storage PDF upload to exactly match UserResumes.jsx
   async function handleUploadResume(e) {
     e.preventDefault();
+    if (!newResumeTitle || !selectedFile) return alert("Please provide a title and select a PDF file.");
+    
+    if (selectedFile.type !== 'application/pdf') {
+      return alert("Only PDF files are allowed.");
+    }
+
     setIsUploadingResume(true);
-    
-    const { error } = await supabase.from('resumes').insert([{
-      user_id: currentUser.id,
-      title: newResumeTitle,
-      file_url: newResumeUrl,
-      status: 'Pending'
-    }]);
-    
-    if (!error) {
+
+    try {
+      const fileExt = selectedFile.name.split('.').pop();
+      const fileName = `${currentUser.id}-${Date.now()}.${fileExt}`;
+      const filePath = `${currentUser.id}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('resumes')
+        .upload(filePath, selectedFile);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('resumes')
+        .getPublicUrl(filePath);
+
+      const { error: dbError } = await supabase.from('resumes').insert([{
+        user_id: currentUser.id,
+        title: newResumeTitle,
+        file_url: publicUrl,
+        status: 'Pending'
+      }]);
+
+      if (dbError) throw dbError;
+
       alert("Resume submitted successfully! Once an admin approves it, you can apply for this job.");
       setShowApplyModal(false);
       setNewResumeTitle('');
-      setNewResumeUrl('');
-    } else {
-      alert("Failed to submit resume.");
+      setSelectedFile(null);
+    } catch (error) {
+      console.error("Upload error:", error);
+      alert("Failed to upload resume. Please try again.");
+    } finally {
+      setIsUploadingResume(false);
     }
-    setIsUploadingResume(false);
   }
 
   async function handleSaveJob() {
@@ -372,6 +408,10 @@ export default function Jobs() {
     </div>
   );
 
+  const tabs = role === 'admin' 
+    ? ['All', 'Pending', 'Approved', 'Rejected', 'Archived']
+    : ['Active', 'Archived'];
+
   return (
     <div className="page-container-wide" style={{ paddingBottom: '24px' }}>
 
@@ -400,25 +440,23 @@ export default function Jobs() {
           </div>
         </div>
 
-        {role === 'admin' && (
-          <div className="flex-row gap-8 mb-24" style={{ overflowX: 'auto', paddingBottom: '4px', borderBottom: '1px solid var(--border-color)' }}>
-            {['All', 'Pending', 'Approved', 'Rejected'].map(tab => (
-              <button
-                key={tab} 
-                title={`Filter jobs by ${tab} status`}
-                onClick={() => { setAdminStatusFilter(tab); setSelectedJobId(null); }}
-                style={{
-                  padding: '8px 20px', border: 'none', background: 'none',
-                  borderBottom: adminStatusFilter === tab ? '2px solid var(--primary-color)' : '2px solid transparent',
-                  color: adminStatusFilter === tab ? 'var(--primary-color)' : 'var(--secondary-text)',
-                  fontWeight: adminStatusFilter === tab ? '600' : '400', cursor: 'pointer', fontSize: '1rem',
-                }}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-        )}
+        <div className="flex-row gap-8 mb-24" style={{ overflowX: 'auto', paddingBottom: '4px', borderBottom: '1px solid var(--border-color)' }}>
+          {tabs.map(tab => (
+            <button
+              key={tab} 
+              title={`Filter jobs by ${tab} status`}
+              onClick={() => { setAdminStatusFilter(tab); setSelectedJobId(null); }}
+              style={{
+                padding: '8px 20px', border: 'none', background: 'none',
+                borderBottom: adminStatusFilter === tab ? '2px solid var(--primary-color)' : '2px solid transparent',
+                color: adminStatusFilter === tab ? 'var(--primary-color)' : 'var(--secondary-text)',
+                fontWeight: adminStatusFilter === tab ? '600' : '400', cursor: 'pointer', fontSize: '1rem',
+              }}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
         
         <div className="mb-16">
           <SearchBar 
@@ -491,7 +529,7 @@ export default function Jobs() {
             
             <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 className="m-0" style={{ fontSize: '1.25rem' }}>Apply for Role</h3>
-              <button title="Cancel Application" onClick={() => setShowApplyModal(false)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: 'var(--text-color)', lineHeight: 1 }}>&times;</button>
+              <button title="Cancel Application" onClick={() => { setShowApplyModal(false); setSelectedFile(null); }} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: 'var(--text-color)', lineHeight: 1 }}>&times;</button>
             </div>
             
             <div style={{ padding: '24px' }}>
@@ -556,37 +594,46 @@ export default function Jobs() {
                         </div>
                       ) : (
                         <div className="flex-col gap-16">
-                          {approvedResumes.length === 0 && (
+                          
+                          {/* 🚨 NEW: Added visual empty state styled like UserResumes.jsx */}
+                          {approvedResumes.length === 0 && pendingResumes.length === 0 && (
+                            <div className="card text-center text-secondary p-32 mb-8" style={{ background: 'var(--bg-color)', border: '1px dashed var(--border-color)', boxShadow: 'none' }}>
+                              <div style={{ fontSize: '2.5rem', marginBottom: '16px' }}>📄</div>
+                              <h3 className="m-0 mb-8" style={{ color: 'var(--text-color)' }}>No Resumes Found</h3>
+                              <p className="m-0 text-sm">Please upload your PDF resume below to continue applying.</p>
+                            </div>
+                          )}
+
+                          {approvedResumes.length === 0 && pendingResumes.length > 0 && (
                             <div className="card p-16" style={{ background: '#fffbeb', border: '1px solid #fde68a', marginBottom: '8px', boxShadow: 'none' }}>
                               <p className="m-0" style={{ color: '#b45309', fontWeight: '500', fontSize: '0.95rem' }}>
-                                {pendingResumes.length > 0 
-                                  ? "You currently have a resume pending approval. Once an admin approves it, you can apply for this job!" 
-                                  : "You don't have an approved resume on file. Please submit one for admin approval before applying."}
+                                You currently have a resume pending approval. Once an admin approves it, you can apply for this job!
                               </p>
                             </div>
                           )}
 
+                          {/* 🚨 UPDATED: File upload form matches UserResumes.jsx */}
                           <form onSubmit={handleUploadResume} className="flex-col gap-16">
                             <div>
-                              <label className="block mb-8 font-medium">Resume Title</label>
+                              <label className="block mb-8 font-medium text-sm">Resume Title</label>
                               <input 
                                 type="text" 
                                 className="search-input w-full" 
                                 required 
-                                placeholder="e.g., Lead Developer Resume 2026"
+                                placeholder="e.g., Senior Developer 2024"
                                 value={newResumeTitle}
                                 onChange={(e) => setNewResumeTitle(e.target.value)}
                               />
                             </div>
                             <div>
-                              <label className="block mb-8 font-medium">Link to Resume (Google Drive, Portfolio, etc.)</label>
+                              <label className="block mb-8 font-medium text-sm">Select File (PDF only)</label>
                               <input 
-                                type="url" 
+                                type="file" 
+                                accept="application/pdf"
                                 className="search-input w-full" 
                                 required 
-                                placeholder="https://..."
-                                value={newResumeUrl}
-                                onChange={(e) => setNewResumeUrl(e.target.value)}
+                                onChange={(e) => setSelectedFile(e.target.files[0])}
+                                style={{ padding: '8px' }}
                               />
                             </div>
                             <button 
@@ -595,7 +642,7 @@ export default function Jobs() {
                               style={{ padding: '12px', fontSize: '1rem', marginTop: '8px' }}
                               disabled={isUploadingResume}
                             >
-                              {isUploadingResume ? 'Submitting...' : 'Submit for Approval'}
+                              {isUploadingResume ? 'Uploading...' : 'Upload Resume'}
                             </button>
                           </form>
                         </div>
